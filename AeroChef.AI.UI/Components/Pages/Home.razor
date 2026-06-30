@@ -1,0 +1,166 @@
+@page "/"
+@using AeroChef.AI.UI.Models
+@using Markdig;
+@rendermode InteractiveServer
+@inject IJSRuntime JS
+@inject HttpClient Http // Ensure you have this at the top
+
+<div class="container py-5 text-center">
+    <h1 class="display-3 fw-bold text-dark">AeroChef <span class="text-primary">For Flight Kitchens</span></h1>
+    <p class="lead text-muted">Enterprise intelligence for flight kitchen operations.</p>
+</div>
+
+<div class="container mb-5">
+    <div class="row row-cols-1 row-cols-md-4 g-4">
+        @foreach (var module in modules)
+        {
+            <div class="col">
+                <div class="card h-100 shadow-sm border-0 p-3 text-center module-card">
+                    <i class="bi @module.Icon display-6 text-primary mb-3"></i>
+                    <h6 class="card-title fw-bold text-dark">@module.Name</h6>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+<button class="btn btn-primary rounded-circle shadow-lg"
+        style="position: fixed; bottom: 30px; right: 30px; width: 60px; height: 60px; z-index: 1000;"
+        @onclick="() => showChat = true">
+    <i class="bi bi-robot"></i>
+</button>
+
+@if (showChat)
+{
+    <div class="modal d-block" style="z-index: 1056; pointer-events: none;">
+        <div class="modal-dialog" style="pointer-events: auto; margin: 20px;">
+            <div class="modal-content shadow-lg border-0" style="height: 70vh; display: flex; flex-direction: column;">
+                
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title">AeroChef AI</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="() => showChat = false"></button>
+                </div>
+
+                <div id="chatBody" class="modal-body p-2" style="flex: 1; overflow-y: auto; overflow-x: hidden; background: #f8f9fa;">
+                    @foreach (var msg in chatHistory)
+                    {
+                        <div class="p-2 @(msg.IsUser ? "text-end" : "text-start")">
+                            <div class="chat-message-bubble @(msg.IsUser ? "bg-primary text-white" : "bg-secondary text-white")"
+                                 style="border-radius: 15px;">
+                                @((MarkupString)RenderMarkdown(msg.Content))
+                            </div>
+                        </div>
+                    }
+    
+                    @if (isThinking)
+                    {
+                        <div class="p-2 text-start">
+                            <div class="chat-message-bubble bg-light text-dark shadow-sm" style="border-radius: 15px;">
+                                <div class="spinner-grow spinner-grow-sm text-primary me-2"></div>
+                                AeroChef is thinking...
+                            </div>
+                        </div>
+                    }
+                </div>
+                <div class="modal-footer p-2">
+                    <input class="form-control" @bind="currentMessage" @bind:event="oninput" @onkeyup="HandleKeyUp" placeholder="Ask anything..." />
+                    <button class="btn btn-primary" @onclick="SendMessage">Send</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+@code {
+    // UI State
+    private bool showChat = false;
+    private string currentMessage = "";
+
+    private bool isThinking = false;
+
+    // Data Structures
+ 
+    public class ModuleItem { public string Name { get; set; } public string Icon { get; set; } }
+
+    private List<ChatMessage> chatHistory = new List<ChatMessage> {
+        new ChatMessage { Content = "Hello! How can I assist you with AeroChef operations today?", IsUser = false }
+    };
+
+    private List<ModuleItem> modules = new List<ModuleItem>
+    {
+        new ModuleItem { Name = "Setup", Icon = "bi-gear-wide-connected" },
+        new ModuleItem { Name = "Control Room", Icon = "bi-command" },
+        new ModuleItem { Name = "Contract", Icon = "bi-file-earmark-text" },
+        new ModuleItem { Name = "Menu", Icon = "bi-book" },
+        new ModuleItem { Name = "Purchase", Icon = "bi-cart-check" },
+        new ModuleItem { Name = "Inventory", Icon = "bi-box-seam" },
+        new ModuleItem { Name = "Airlines Inv.", Icon = "bi-airplane" },
+        new ModuleItem { Name = "Galley Inv.", Icon = "bi-cup-hot" },
+        new ModuleItem { Name = "Production", Icon = "bi-mortarboard" },
+        new ModuleItem { Name = "Dispatch", Icon = "bi-truck" },
+        new ModuleItem { Name = "Off Loading", Icon = "bi-arrow-down-square" },
+        new ModuleItem { Name = "Food Bank", Icon = "bi-bank" },
+        new ModuleItem { Name = "Invoicing", Icon = "bi-receipt" },
+        new ModuleItem { Name = "MIS Report", Icon = "bi-graph-up-arrow" },
+        new ModuleItem { Name = "Catering", Icon = "bi-people" }
+    };
+
+    // Chat Logic
+    private async Task SendMessage()
+    {
+        if (string.IsNullOrWhiteSpace(currentMessage)) return;
+
+        chatHistory.Add(new ChatMessage { Content = currentMessage, IsUser = true });
+        var userPrompt = currentMessage;
+        currentMessage = "";
+        
+        // Show Loader
+        isThinking = true;
+        StateHasChanged(); // Force Blazor to re-render and show spinner
+        await ScrollToBottom(); // Force scroll when thinking starts
+        await ProcessAIResponse(userPrompt);
+    }
+
+    private async Task ProcessAIResponse(string prompt)
+    {
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/Agent/safety", prompt);
+        
+            if (response.IsSuccessStatusCode)
+            {
+                var data = await response.Content.ReadFromJsonAsync<AgentResponse>();
+                chatHistory.Add(new ChatMessage { Content = data.Response, IsUser = false });
+            }
+        }
+        catch (Exception ex)
+        {
+            chatHistory.Add(new ChatMessage { Content = "Error connecting to ChefBot.", IsUser = false });
+        }
+
+        finally
+        {
+            // 4. Hide Loader (Finally ensures this runs even if an error occurs)
+            isThinking = false;
+            StateHasChanged(); // Force Blazor to hide spinner
+            await ScrollToBottom(); // Force scroll when response arrives
+        }
+    }
+
+    private async Task HandleKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await SendMessage();
+    }
+
+    private string RenderMarkdown(string markdown)
+    {
+        var pipeline = new MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
+        return Markdown.ToHtml(markdown, pipeline);
+    }
+
+    private async Task ScrollToBottom()
+    {
+        // Give the UI a tiny moment to render the new content before scrolling
+        await Task.Delay(50);
+        await JS.InvokeVoidAsync("scrollToBottom", "chatBody");
+    }
+}

@@ -1,0 +1,63 @@
+{
+  "$schema": "https://github.com/Azure/data-api-builder/releases/download/v2.0.8/dab.draft.schema.json",
+  "data-source": {
+    "database-type": "mssql",
+    "connection-string": "Server=(localdb)\\MSSQLLocalDB;Database=AeroKitchenDB;Trusted_Connection=True;TrustServerCertificate=True;",
+    "options": {
+      "set-session-context": false
+    }
+  },
+  "runtime": {
+    "rest": {
+      "enabled": true,
+      "path": "/api",
+      "request-body-strict": false
+    },
+    "graphql": {
+      "enabled": true,
+      "path": "/graphql",
+      "allow-introspection": true
+    },
+    "mcp": {
+      "enabled": true,
+      "path": "/mcp"
+    },
+    "host": {
+      "cors": {
+        "origins": [],
+        "allow-credentials": false
+      },
+      "authentication": { "provider": "Simulator" },
+      "mode": "development"
+    }
+  },
+  "autoentities": {},
+  "entities": {
+    "KitchenProduction": {
+      "source": "KitchenProduction",
+      "permissions": [
+        {
+          "role": "Chef",
+          "actions": [ "read", "update" ]
+        },
+        {
+          "role": "OpsLead",
+          "actions": [ "read" ]
+        }
+      ]
+    },
+    "HACCP_Compliance": {
+      "source": "HACCP_Compliance",
+      "permissions": [
+        {
+          "role": "SafetyOfficer",
+          "actions": [ "read", "create" ]
+        },
+        {
+          "role": "OpsLead",
+          "actions": [ "read" ]
+        }
+      ]
+    }
+  }
+}
